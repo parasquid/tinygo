@@ -218,16 +218,25 @@ def parseBitfields(groupName, regName, fieldsEls, bitfieldPrefix=''):
             # names like 'CNT[31]'. Replace invalid characters with '_' when
             # needed.
             fieldName = cleanName(getText(fieldEl.find('name')))
-            lsbTags = fieldEl.findall('lsb')
-            if len(lsbTags) == 1:
-                lsb = int(getText(lsbTags[0]))
-            else:
+            if not fieldName[0].isupper() and not fieldName[0].isdigit():
+                fieldName = fieldName.upper()
+            if len(fieldEl.findall('lsb')) == 1 and len(fieldEl.findall('msb')) == 1:
+                # try to use lsb/msb tags
+                lsb = int(getText(fieldEl.findall('lsb')[0]))
+                msb = int(getText(fieldEl.findall('msb')[0]))
+            elif len(fieldEl.findall('bitOffset')) > 0 and len(fieldEl.findall('bitWidth')) > 0:
+                # try to use bitOffset/bitWidth tags
                 lsb = int(getText(fieldEl.find('bitOffset')))
-            msbTags = fieldEl.findall('msb')
-            if len(msbTags) == 1:
-                msb = int(getText(msbTags[0]))
-            else:
                 msb = int(getText(fieldEl.find('bitWidth'))) + lsb - 1
+            elif len(fieldEl.findall('bitRange')) > 0:
+                # try use bitRange
+                bitRangeTags = fieldEl.findall('bitRange')
+                lsb = int(getText(bitRangeTags[0]).split(":")[1][:-1])
+                msb = int(getText(bitRangeTags[0]).split(":")[0][1:])
+            else:
+                # this is an error. what to do?
+                print("unable to find lsb/msb in field:", fieldName)
+
             fields.append({
                 'name':        '{}_{}{}_{}_Pos'.format(groupName, bitfieldPrefix, regName, fieldName),
                 'description': 'Position of %s field.' % fieldName,
@@ -246,6 +255,8 @@ def parseBitfields(groupName, regName, fieldsEls, bitfieldPrefix=''):
                 })
             for enumEl in fieldEl.findall('enumeratedValues/enumeratedValue'):
                 enumName = getText(enumEl.find('name'))
+                if not enumName[0].isupper() and not enumName[0].isdigit():
+                    enumName = enumName.upper()
                 enumDescription = getText(enumEl.find('description')).replace('\n', ' ')
                 enumValue = int(getText(enumEl.find('value')), 0)
                 fields.append({
@@ -311,15 +322,15 @@ def parseRegister(groupName, regEl, baseAddress, bitfieldPrefix=''):
                     'elementsize': reg.size(),
                 })
             # set first result bitfield
-            shortName = reg.name().replace('_%s', '').replace('%s', '')
+            shortName = reg.name().replace('_%s', '').replace('%s', '').upper()
             results[0]['bitfields'] = parseBitfields(groupName, shortName, fieldsEls, bitfieldPrefix)
             return results
-
+    regName = reg.name().upper()
     return [{
-        'name':        reg.name(),
+        'name':        regName,
         'address':     reg.address(),
         'description': reg.description(),
-        'bitfields':   parseBitfields(groupName, reg.name(), fieldsEls, bitfieldPrefix),
+        'bitfields':   parseBitfields(groupName, regName, fieldsEls, bitfieldPrefix),
         'array':       reg.dim(),
         'elementsize': reg.size(),
     }]
